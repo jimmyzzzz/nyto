@@ -7,7 +7,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 with codecs.open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
     long_description = "\n" + fh.read()
 
-VERSION = '0.0.5'
+VERSION = '0.0.8'
 DESCRIPTION = 'Metaheuristic tools for deep learning models'
 LONG_DESCRIPTION = 'A package that allows users to write their own metaheuristic algorithms to train built-in deep learning models'
 
@@ -23,7 +23,7 @@ setup(
     packages=find_packages(),
     install_requires=['numpy'],
     keywords=['python'],
-    python_requires=">=3.6",
+    python_requires=">=3.7",
     classifiers=[
         "Development Status :: 1 - Planning",
         "Intended Audience :: Developers",

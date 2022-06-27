@@ -2,9 +2,6 @@
 from nyto import net
 import numpy as np
 
-def _variable_to_np(var):
-	return var.values
-
 def _linear(data):
 	return data
 
@@ -161,72 +158,95 @@ def _strided(data_np, kernel_shape, strides=1):
 		)
 	)
 
-def _conv_compute(batch_np, kernals_np):
+def _strided_3d(data_np, kernel_shape, strides=1):
+	'''
+	將圖片分割成許多小窗口
+	[param]
+	(np)data_np:          4d_np[data_shape][img_shape][row_shape][col_shape]
+	(tuple)kernel_shape:  exp:(3,2)
+	(int)strides:         步伐大小(窗口間隔)
+	[return]
+	(np)6d_np: [data_shape, row_stepn, col_stepn, img_shape, row_split, col_split]
+	'''
+	data_btyes=data_np.strides[-1]
+	(data_shape,img_shape,row_shape,col_shape)=data_np.shape
+
+	(row_split,col_split)=kernel_shape
+	col_stepn=((col_shape-col_split)//strides)+1
+	row_stepn=((row_shape-row_split)//strides)+1
+
+	return np.lib.stride_tricks.as_strided(
+		data_np,
+		shape=(
+			data_shape, 
+			row_stepn, col_stepn,
+			img_shape,
+			row_split, col_split
+		),
+		strides=(
+			img_shape*row_shape*col_shape*data_btyes,
+			strides*col_shape*data_btyes,
+			strides*data_btyes,
+			row_shape*col_shape*data_btyes,
+			col_shape*data_btyes,
+			data_btyes
+		)
+	)
+
+def _conv_compute(cat_np, filter_np):
 	'''
 	計算窗口與kernl的乘積
 	[param]
-	(np)batch_np:   4d_np[data_shape, batch_shape, row_split, col_split]
-	(np)kernals_np: 3d_np[kernal_shape, row_split, col_split]
+	(np)batch_np:   4d_np[data_shape, cat_shape, row_split, col_split]
+	(np)kernals_np: 3d_np[filter_shape, row_split, col_split]
 
 	[return]
-	(np)4d_np:      [data_shape, kernal_shape, img_shape*row_stepn*col_stepn]
-	*ps. batch_shape=img_shape*row_stepn*col_stepn
+	(np)3d_np:      [data_shape, filter_shape, cat_shape]
 	'''
-	return np.einsum('dbij,kij -> dkb', batch_np, kernals_np)
+	return np.einsum('dckij,fkij -> dfc', cat_np, filter_np)
 
-def _convolution(data_np, kernals_np, mod='valid', strides=1):
+def _convolution(data_np, filter_np, mod='valid', strides=1):
 	'''
 	[param]
 	(np)data_np:     4d_np[data_shape][img_shape][row_shape][col_shape]
-	(np)kernals_np:  3d_np[kernal_shape][row_split][col_split]
+	(np)filter_np:   4d_np[filter_shape][img_shape][row_split][col_split]
 	(str)mod:        'full' or 'valid' or 'same'
 	(int)strides:    窗口移動間隔
 	[return]
 	(np)new_data_np: 4d_np[data_shape][conv_shape][row_stepn][col_stepn]
 	'''
 	(data_shape, img_shape, row_shape, col_shape)=data_np.shape
-	(kernal_shape, row_split, col_split)=kernals_np.shape
+	(filter_shape, img_shape, row_split, col_split)=filter_np.shape
 
 	# 周圍補0 #
 	pad_np=data_np if mod=='same' else _pad(
 		data_np=data_np,
 		kernel_shape=(row_split,col_split),
-		mod=mod,constant=0
+		mod=mod,
+		constant=0
 	)
 
 	# 切割出窗口 #
-	# (6d_np)strided_np
-	#[data_shape][img_shape][row_stepn][col_stepn][row_split][col_split]
-	strided_np=_strided(
+	strided_np=_strided_3d(
 		data_np=pad_np,
 		kernel_shape=(row_split,col_split),
 		strides=strides
 	)
 
+	(_, row_stepn, col_stepn, _, _, _)=strided_np.shape
+
 	# 合併窗口的排列方式: 2d排列 -> 1d排列 #
-	(
-		data_shape, img_shape,
-		row_stepn, col_stepn,
-		row_split, col_split
-	)=strided_np.shape
-
-	batch_shape=img_shape*row_stepn*col_stepn
-	batch_np=strided_np.reshape(
-		data_shape, batch_shape, row_split, col_split
+	cat_np=strided_np.reshape(
+		data_shape, -1, img_shape, row_split, col_split,
 	)
 
-	# 計算窗口與kernl的乘積 #
-	conv_np=_conv_compute(batch_np, kernals_np)
+	# 計算窗口與filter的乘積 #
+	conv_np=_conv_compute(cat_np, filter_np)
 
-	# 將卷集完變成1d的imgs分開並變成2d的img #
-	# before:[data_shape, kernal_shape, img_shape*row_stepn*col_stepn]
-	# after:[data_shape, kernal_shape*img_shape, row_stepn, col_stepn]
-	conv_shape=img_shape*kernal_shape
-	new_data_np=conv_np.reshape(
-		data_shape, conv_shape, row_stepn, col_stepn
+	# 將卷集完map排列由1d還原回2d #
+	return conv_np.reshape(
+		data_shape, filter_shape, row_stepn, col_stepn
 	)
-
-	return new_data_np
 
 def _max_pooling(data_np, kernel_shape, strides=1):
 	'''
@@ -297,6 +317,9 @@ def _flattening(data_np):
 	[return]
 	(np)2d_np:   [data_shape][feature_shape]
 	'''
+
+	if type(data_np)==list: data_np=np.array(data_np)
+
 	data_shape=data_np.shape[0]
 	return data_np.reshape(
 		data_shape, int(data_np.size/data_shape)
@@ -318,11 +341,6 @@ class add_func_node(net.add_func_to_net):
 		net_ref=node_if.net_ref
 		add_func_to_data_ref(net_ref, self.node_id, self.func)
 		return net_ref[self.node_id](node_if)
-
-class variable_to_np(add_func_node):
-	def __init__(self): super().__init__(
-		node_id='_variable_to_np', func=_variable_to_np
-	)
 
 class linear(add_func_node):
 	def __init__(self): super().__init__(
@@ -430,13 +448,6 @@ class average_pooling(net.add_func_to_net):
 			kernel_shape=self.kernel_shape_node_if,
 			strides=self.strides_node_if
 		)
-
-def to_np(node_if):
-	net_ref=node_if.net_ref
-	(node_id,func)=('_variable_to_np',_variable_to_np)
-
-	add_func_to_data_ref(net_ref, node_id, func)
-	return net_ref[node_id](node_if)
 
 def concatenate(*node_ifs, axis=1):
 	net_ref=node_ifs[0].net_ref
