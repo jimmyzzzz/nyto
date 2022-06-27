@@ -2,9 +2,6 @@
 from nyto import net
 import numpy as np
 
-def _variable_to_np(var):
-	return var.values
-
 def _linear(data):
 	return data
 
@@ -208,7 +205,7 @@ def _conv_compute(cat_np, filter_np):
 	'''
 	return np.einsum('dckij,fkij -> dfc', cat_np, filter_np)
 
-ef _convolution(data_np, filter_np, mod='valid', strides=1):
+def _convolution(data_np, filter_np, mod='valid', strides=1):
 	'''
 	[param]
 	(np)data_np:     4d_np[data_shape][img_shape][row_shape][col_shape]
@@ -320,6 +317,9 @@ def _flattening(data_np):
 	[return]
 	(np)2d_np:   [data_shape][feature_shape]
 	'''
+
+	if type(data_np)==list: data_np=np.array(data_np)
+
 	data_shape=data_np.shape[0]
 	return data_np.reshape(
 		data_shape, int(data_np.size/data_shape)
@@ -341,11 +341,6 @@ class add_func_node(net.add_func_to_net):
 		net_ref=node_if.net_ref
 		add_func_to_data_ref(net_ref, self.node_id, self.func)
 		return net_ref[self.node_id](node_if)
-
-class variable_to_np(add_func_node):
-	def __init__(self): super().__init__(
-		node_id='_variable_to_np', func=_variable_to_np
-	)
 
 class linear(add_func_node):
 	def __init__(self): super().__init__(
@@ -453,13 +448,6 @@ class average_pooling(net.add_func_to_net):
 			kernel_shape=self.kernel_shape_node_if,
 			strides=self.strides_node_if
 		)
-
-def to_np(node_if):
-	net_ref=node_if.net_ref
-	(node_id,func)=('_variable_to_np',_variable_to_np)
-
-	add_func_to_data_ref(net_ref, node_id, func)
-	return net_ref[node_id](node_if)
 
 def concatenate(*node_ifs, axis=1):
 	net_ref=node_ifs[0].net_ref

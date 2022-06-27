@@ -129,7 +129,7 @@ class lstm_layer(layer):
 
         return final_ret, new_mem
 
-    def __call__(self, input_data):
+    def run_series(self, input_data):
         return_data_list=[]
         last_output=self.init_out.values
         memory_np=self.init_mem.values
@@ -141,6 +141,9 @@ class lstm_layer(layer):
             return_data_list.append(last_output.squeeze(0))
 
         return np.array(return_data_list)
+
+    def __call__(self, batch_data):
+        return [self.run_series(data) for data in batch_data]
 
     @property
     def shape(self):
