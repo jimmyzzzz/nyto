@@ -65,38 +65,49 @@ def add_mod(mod, tag_set):
 def add_data(data):
 	return net.static_unit(data=data)
 
-def _get_data_size(push_dict):
-	data=list(push_dict.values())[0]
-	if isinstance(data, net.node_interface):
-		return len(get(data))
-	return len(data)
+def _select_data(data, idx_np):
+    if type(data)==np.ndarray:
+        return [data[idxs] for idxs in idx_np]
+    
+    if type(data)==list:
+        ret_list=[]
+        for idxs in idx_np:
+            data_list=[data[idx] for idx in idxs]
+            ret_list.append(data_list)
+        return ret_list
+    
+    raise ValueError('data should be list or array')
 
-def batch_launcher(nn, batch_push, get, batch_size, static_push={}, shuffle=True):
-
-	data_size=_get_data_size(batch_push)
-	idx_list=list(range(data_size))
-
-	if shuffle:
-		if data_size%batch_size!=0:
-			excess_n=batch_size-data_size%batch_size
-			idx_list+=random.sample(idx_list, excess_n)
-
-		random.shuffle(idx_list)
-
-	batch_n=int(len(idx_list)/batch_size)
-	idx_np=np.array(idx_list).reshape(batch_n, batch_size)
-
-	launcher_node_list=[]
-	for idx in idx_np:
-		push={
-			k:v[idx] for k,v in batch_push.items()
-		}
-		push={**push, **static_push}
-
-		batch_node=nn.launcher(*get, **push)
-		launcher_node_list.append(batch_node)
-
-	return launcher_node_list
+def batch_launcher(nn, batch_push, get, batch_size, static_push={}):
+    
+    data_size=len(list(batch_push.values())[0])
+    idx_list=list(range(data_size))
+    
+    excess_size=0
+    if data_size%batch_size!=0:excess_size=batch_size-data_size%batch_size
+    
+    idx_list+=random.sample(idx_list, excess_size)
+    
+    random.shuffle(idx_list)
+    idx_np=np.array(idx_list).reshape(-1, batch_size)
+    
+    select_dict={
+        key:_select_data(values, idx_np)
+        for key,values in batch_push.items()
+    }
+    
+    launcher_node_list=[]
+    for batch_idx in range(len(idx_np)):
+        push={
+            k: select_dict[k][batch_idx]
+            for k,v in batch_push.items()
+        }
+        push={**push, **static_push}
+        
+        batch_node=nn.launcher(*get, **push)
+        launcher_node_list.append(batch_node)
+        
+    return launcher_node_list
 
 def fix_mod(net_ref, node_id):
 	net_ref.mod[node_id].fix()
