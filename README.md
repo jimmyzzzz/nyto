@@ -15,7 +15,7 @@ nyto是一款輕量化的python庫，方便使用者快速開發元啟發算法(
 
 ### 安裝
 
-安裝nyto需要預先安裝python3.6或更高的版本，以及pip和numpy。而通常pip會與python一起安裝。
+安裝nyto需要預先安裝python3.7或更高的版本，以及pip和numpy。而通常pip會與python一起安裝。
 
 從PyPI安裝:
 ```bash
@@ -70,3 +70,8 @@ from nyto.net_tool import get
 
 layer1_return,layer2_return = get(node.layer1_output, node.layer2_output)
 ```
+
+## 作者(jimmyzzzz)
+
+gmail: sciencestudyjimmy@gmail.com
+github: https://github.com/jimmyzzzz
